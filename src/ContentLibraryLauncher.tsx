@@ -366,8 +366,47 @@ function TableHeaderCell({ width, sorted, children }: { width?: number; sorted?:
 
 const TABLE_MIN_WIDTH = COL.select + COL.status + COL.version + COL.contentDate + COL.effectiveDate + COL.type + COL.assigned + 260;
 
+/**
+ * Where to go when the flow is closed. A caller that linked straight into the
+ * modal (?flow=ai) passes ?from=<its own url>, and closing returns there rather
+ * than dropping the visitor into a content library they never asked for.
+ * Anything that is not an http(s) url is ignored, so the param cannot be used
+ * to bounce someone off to an arbitrary scheme.
+ */
+function returnUrl(): string | null {
+  const from = new URLSearchParams(window.location.search).get('from');
+  if (!from) return null;
+  try {
+    const url = new URL(from, window.location.origin);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
 export function ContentLibraryLauncher() {
-  const [showFlow, setShowFlow] = useState(false);
+  // ?flow=ai opens straight into AI Course Authoring, so another prototype can
+  // link to the flow itself rather than landing on the library behind it —
+  // the LMS DOA matrix does this from an unmapped duty's "Draft course".
+  const [showFlow, setShowFlow] = useState(
+    () => new URLSearchParams(window.location.search).get('flow') === 'ai',
+  );
+
+  // ?source=none opens the flow with NO document attached — how the LMS
+  // Training Library's "Create Course → AI Course Authoring" arrives, with
+  // nothing chosen yet. Without it the flow keeps its default source document.
+  const [linkedSourceDoc] = useState<string | null | undefined>(() =>
+    new URLSearchParams(window.location.search).get('source') === 'none' ? null : undefined,
+  );
+
+  function closeFlow() {
+    const back = returnUrl();
+    if (back) {
+      window.location.href = back;
+      return;
+    }
+    setShowFlow(false);
+  }
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [hoveredRowId, setHoveredRowId] = useState<string | null>(null);
   const [page, setPage] = useState<'library' | 'course' | 'activity'>('library');
@@ -673,7 +712,8 @@ export function ContentLibraryLauncher() {
 
       {showFlow && (
         <AICourseAuthoringFlow
-          onClose={() => setShowFlow(false)}
+          initialSourceDoc={linkedSourceDoc}
+          onClose={closeFlow}
           onCourseSaved={() => {
             setShowFlow(false);
             setPage('course');

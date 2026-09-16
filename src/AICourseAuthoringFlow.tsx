@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChatMessage, FlowStage, LessonType, RightPanelTab } from './types';
 import { AI_FOLLOWUP_RESPONSES, AI_INTRO_RESPONSE, DEFAULT_SOURCE_DOC } from './mockData';
+import { SAVED_COURSE } from './savedCourseData';
 import { ComposeStep } from './ComposeStep';
 import { ThinkingStep } from './ThinkingStep';
 import { SavingStep } from './SavingStep';
@@ -8,20 +9,30 @@ import { ResultStep } from './ResultStep';
 import { useMediaQuery } from './useMediaQuery';
 
 export interface AICourseAuthoringFlowProps {
+  /**
+   * The document the course is drafted from. Opened from a document, the
+   * caller passes it in; opened from Create Course there is none yet, and the
+   * compose step's source field is where one gets picked or uploaded.
+   */
+  initialSourceDoc?: string | null;
   onClose: () => void;
-  /** Called once the "Save as Draft" save has finished — the parent takes
-   * over from here (closing this modal and navigating to the saved course). */
-  onCourseSaved: () => void;
+  /**
+   * Called once the "Save as Draft" save has finished — the parent takes over
+   * from here (closing this modal and navigating to the saved course, or
+   * adding it to the library it was created from). The draft is described by
+   * the source document it was generated from, which is also what names it.
+   */
+  onCourseSaved: (draft: { title: string; sourceDoc: string | null }) => void;
 }
 
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-export function AICourseAuthoringFlow({ onClose, onCourseSaved }: AICourseAuthoringFlowProps) {
+export function AICourseAuthoringFlow({ initialSourceDoc = DEFAULT_SOURCE_DOC, onClose, onCourseSaved }: AICourseAuthoringFlowProps) {
   const [stage, setStage] = useState<FlowStage>('compose');
   const isNarrow = useMediaQuery('(max-width: 640px)');
 
   // Compose state
-  const [sourceDoc, setSourceDoc] = useState<string | null>(DEFAULT_SOURCE_DOC);
+  const [sourceDoc, setSourceDoc] = useState<string | null>(initialSourceDoc);
   const [description, setDescription] = useState('');
   const [lessonType, setLessonType] = useState<LessonType>('document');
   const [language, setLanguage] = useState('English');
@@ -53,7 +64,10 @@ export function AICourseAuthoringFlow({ onClose, onCourseSaved }: AICourseAuthor
   const handleSaveDraft = () => {
     setStage('saving');
     window.setTimeout(() => {
-      onCourseSaved();
+      // The saved course takes its name from the source document, the way
+      // SAVED_COURSE does — so a course drafted from a picked document is
+      // named after that document rather than the built-in one.
+      onCourseSaved({ title: sourceDoc ?? SAVED_COURSE.title, sourceDoc });
     }, 1400);
   };
 
@@ -103,6 +117,7 @@ export function AICourseAuthoringFlow({ onClose, onCourseSaved }: AICourseAuthor
         {stage === 'compose' && (
           <ComposeStep
             sourceDoc={sourceDoc}
+            onPickSource={setSourceDoc}
             onRemoveSource={() => setSourceDoc(null)}
             description={description}
             onChangeDescription={setDescription}
